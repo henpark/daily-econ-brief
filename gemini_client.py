@@ -19,13 +19,16 @@ BASE = "https://generativelanguage.googleapis.com/v1beta"
 API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 
 # 무료 티어에서 쓸 수 있는 모델 후보. 앞에서부터 되는 걸 쓴다.
-# GEMINI_MODEL 환경변수로 직접 지정하면 그것만 쓴다.
+DEFAULT_MODELS = (
+    "gemini-3.5-flash,gemini-3.6-flash,gemini-2.5-flash,"
+    "gemini-3.1-flash-lite,gemini-2.5-flash-lite,gemini-2.0-flash"
+)
+
+# 주의: GitHub Actions는 정의 안 된 변수를 "빈 문자열"로 넘긴다.
+# os.environ.get(키, 기본값)은 이때 기본값이 아니라 빈 문자열을 준다. 그래서 `or`로 한 번 더 거른다.
 MODEL_CANDIDATES = [
     m.strip()
-    for m in os.environ.get(
-        "GEMINI_MODEL",
-        "gemini-3.5-flash,gemini-3.6-flash,gemini-2.5-flash,gemini-3.1-flash-lite,gemini-2.5-flash-lite",
-    ).split(",")
+    for m in (os.environ.get("GEMINI_MODEL", "").strip() or DEFAULT_MODELS).split(",")
     if m.strip()
 ]
 
@@ -99,13 +102,49 @@ def _try_once(model: str, system: str, prompt: str) -> str:
     return _extract_generate(data)
 
 
+def discover_models() -> list[str]:
+    """후보가 전부 안 되면 구글에 직접 물어서 쓸 수 있는 flash 계열을 찾는다."""
+    try:
+        req = urllib.request.Request(
+            f"{BASE}/models?pageSize=200", headers={"x-goog-api-key": API_KEY}
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        print(f"  모델 목록 조회 실패: {e}")
+        return []
+
+    found = []
+    for m in data.get("models", []):
+        name = m.get("name", "").replace("models/", "")
+        methods = m.get("supportedGenerationMethods") or []
+        if "generateContent" in methods and "flash" in name and "thinking" not in name:
+            found.append(name)
+    # 최신 버전이 앞에 오도록 대충 정렬
+    found.sort(reverse=True)
+    print(f"  자동 탐색으로 찾은 모델: {found[:5]}")
+    return found[:5]
+
+
 def ask(system: str, prompt: str, retries: int = 3) -> str:
     """모델 후보를 돌면서 응답을 받아온다. 결제수단 미등록 시 429는 '한도 초과'이지 과금이 아니다."""
     if not API_KEY:
-        raise RuntimeError("GEMINI_API_KEY 없음")
+        raise RuntimeError("GEMINI_API_KEY 없음 — GEMINI_API_KEY Secret을 확인하세요")
+    if not MODEL_CANDIDATES:
+        raise RuntimeError("모델 후보가 비었습니다 (코드 버그)")
+
+    print(f"  시도할 모델: {MODEL_CANDIDATES}")
+    candidates = list(MODEL_CANDIDATES)
+    discovered = False
 
     last_err: Exception | None = None
-    for model in MODEL_CANDIDATES:
+    while candidates:
+        model = candidates.pop(0)
+        if not candidates and not discovered:
+            # 마지막 후보까지 왔는데 아직 자동 탐색을 안 했으면, 실패 대비로 목록을 채워둔다
+            discovered = True
+            extra = [m for m in discover_models() if m != model]
+            candidates.extend(extra)
         for attempt in range(retries):
             try:
                 out = _try_once(model, system, prompt)
