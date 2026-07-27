@@ -32,6 +32,20 @@ if not PAT:
 if "code=" in CODE:
     CODE = urllib.parse.parse_qs(urllib.parse.urlparse(CODE).query).get("code", [CODE])[0]
 
+# --- 진단 정보. 비밀값은 앞 4자리만 찍는다 ---
+print("=" * 50)
+print("진단 정보")
+print(f"  REST API 키   : {KEY[:4]}...{KEY[-2:]}  (길이 {len(KEY)})")
+print(f"  클라이언트 시크릿: {'있음 ' + SECRET[:4] + '...' if SECRET else '❗️없음 — Secret 미등록'}")
+print(f"  Redirect URI  : {REDIRECT}")
+print(f"  code          : {CODE[:6]}... (길이 {len(CODE)})")
+print("=" * 50)
+if not SECRET:
+    print("⚠️  클라이언트 시크릿이 없습니다. 카카오는 이제 이걸 필수로 요구합니다.")
+    print("   KAKAO_CLIENT_SECRET Secret을 등록하지 않으면 KOE010이 납니다.")
+if len(KEY) != 32:
+    print(f"⚠️  REST API 키 길이가 {len(KEY)}입니다. 보통 32자입니다. 앞뒤 공백이나 다른 키가 아닌지 확인하세요.")
+
 payload = {
     "grant_type": "authorization_code",
     "client_id": KEY,
