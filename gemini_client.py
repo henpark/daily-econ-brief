@@ -37,6 +37,10 @@ class QuotaExceeded(RuntimeError):
     pass
 
 
+# 검색 그라운딩이 막혀서 검색 없이 생성한 경우 True가 된다. 대시보드에 경고를 붙이는 데 쓴다.
+SEARCH_DISABLED = False
+
+
 def _post(path: str, body: dict, timeout: int = 300) -> dict:
     req = urllib.request.Request(
         f"{BASE}/{path}",
@@ -69,36 +73,36 @@ def _extract_generate(data: dict) -> str:
     return "\n".join(p["text"] for p in parts if "text" in p).strip()
 
 
-def _try_once(model: str, system: str, prompt: str) -> str:
-    """Interactions → generateContent 순서로 시도."""
+def _try_once(model: str, system: str, prompt: str, use_search: bool = True) -> str:
+    """Interactions → generateContent 순서로 시도. use_search=False면 검색 도구를 뺀다."""
     try:
-        data = _post(
-            "interactions",
-            {
-                "model": model,
-                "input": f"{system}\n\n---\n\n{prompt}",
-                "tools": [{"type": "google_search"}],
-            },
-        )
+        body = {"model": model, "input": f"{system}\n\n---\n\n{prompt}"}
+        if use_search:
+            body["tools"] = [{"type": "google_search"}]
+        data = _post("interactions", body)
         out = _extract_interactions(data)
         if out:
             return out
     except urllib.error.HTTPError as e:
         if e.code == 429:
             raise QuotaExceeded(e.read().decode("utf-8", "replace")[:400]) from e
-        if e.code not in (400, 404):
+        if e.code not in (400, 404, 500, 503):
             raise
-        # 400/404면 이 API 형태를 안 받는 것 → 폴백
+        # 400/404 = 이 API 형태를 안 받음, 500/503 = 일시 오류 → generateContent로 폴백
 
-    data = _post(
-        f"models/{model}:generateContent",
-        {
-            "systemInstruction": {"parts": [{"text": system}]},
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "tools": [{"google_search": {}}],
-            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 16000},
-        },
-    )
+    body = {
+        "systemInstruction": {"parts": [{"text": system}]},
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 16000},
+    }
+    if use_search:
+        body["tools"] = [{"google_search": {}}]
+    try:
+        data = _post(f"models/{model}:generateContent", body)
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            raise QuotaExceeded(e.read().decode("utf-8", "replace")[:400]) from e
+        raise
     return _extract_generate(data)
 
 
@@ -153,8 +157,23 @@ def ask(system: str, prompt: str, retries: int = 3) -> str:
                     return out
                 last_err = RuntimeError(f"{model}: 빈 응답")
             except QuotaExceeded as e:
-                print(f"  [{model}] 무료 한도 초과(429). 과금은 발생하지 않았습니다.")
+                print(f"  [{model}] 검색 켠 요청 429. 검색을 빼고 한 번만 더 시도합니다.")
                 last_err = e
+                try:
+                    out = _try_once(model, system, prompt, use_search=False)
+                    if out:
+                        global SEARCH_DISABLED
+                        SEARCH_DISABLED = True
+                        print(
+                            f"  ⚠️ [{model}] 검색 없이는 성공했습니다.\n"
+                            f"     → 즉, 막힌 것은 '모델'이 아니라 'Google 검색 그라운딩'입니다.\n"
+                            f"     → 무료 티어에서 검색이 안 되므로 실시간 데이터를 쓸 수 없습니다."
+                        )
+                        return out
+                except QuotaExceeded:
+                    print(f"  [{model}] 검색 없이도 429 → 이 모델 자체가 무료 한도 밖입니다.")
+                except Exception as e2:
+                    print(f"  [{model}] 검색 없이 시도도 실패: {str(e2)[:120]}")
                 break  # 같은 모델 재시도해도 소용없음 → 다음 모델
             except urllib.error.HTTPError as e:
                 detail = e.read().decode("utf-8", "replace")[:300]
