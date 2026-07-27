@@ -1,12 +1,9 @@
 name: Daily Economic Dashboard
 
-on:
-  schedule:
-    # 22:35 UTC = 다음날 07:35 KST 기동.
-    # GitHub Actions 크론은 정시 보장이 안 되고 5~20분 밀리는 게 정상이라 일찍 띄운다.
-    # 생성이 끝나면 아래 wait 스텝이 07:50 KST 정각까지 기다렸다가 발송한다.
-    - cron: "35 22 * * 0-4" # 일~목(UTC) = 월~금(KST)
-  workflow_dispatch: # 수동 실행 버튼
+# 22:35 UTC = 다음날 07:35 KST 기동. 크론은 5~20분 밀리는 게 정상이라 일찍 띄우고,
+# 아래 wait 스텝이 07:50 KST 정각까지 기다렸다가 발송한다. 0-4 = 일~목(UTC) = 월~금(KST).
+# 들여쓰기가 깨질 일이 없도록 일부러 한 줄로 썼습니다.
+on: { schedule: [{ cron: "35 22 * * 0-4" }], workflow_dispatch: {} }
 
 permissions:
   contents: write

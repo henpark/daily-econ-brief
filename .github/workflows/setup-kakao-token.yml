@@ -2,13 +2,8 @@ name: 1회용 · 카카오 토큰 등록
 
 # 최초 1번만 실행합니다. 터미널이 필요 없습니다.
 # Actions 탭 → 이 워크플로 선택 → Run workflow → code 붙여넣기 → 초록 버튼.
-on:
-  workflow_dispatch:
-    inputs:
-      code:
-        description: "카카오 로그인 후 주소창의 code= 뒤에 있는 값 (주소 전체를 붙여넣어도 됩니다)"
-        required: true
-        type: string
+# 아래 한 줄이 실행 조건입니다. 들여쓰기가 깨질 일이 없도록 일부러 한 줄로 썼습니다.
+on: { workflow_dispatch: { inputs: { code: { description: "카카오 로그인 후 주소창 전체 (code= 포함)", required: true, type: string } } } }
 
 jobs:
   exchange:
