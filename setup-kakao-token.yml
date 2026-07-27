@@ -1,0 +1,28 @@
+name: 1회용 · 카카오 토큰 등록
+
+# 최초 1번만 실행합니다. 터미널이 필요 없습니다.
+# Actions 탭 → 이 워크플로 선택 → Run workflow → code 붙여넣기 → 초록 버튼.
+on:
+  workflow_dispatch:
+    inputs:
+      code:
+        description: "카카오 로그인 후 주소창의 code= 뒤에 있는 값 (주소 전체를 붙여넣어도 됩니다)"
+        required: true
+        type: string
+
+jobs:
+  exchange:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 카카오 토큰 교환 및 저장
+        env:
+          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
+          KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
+          KAKAO_CODE: ${{ inputs.code }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python exchange_code.py

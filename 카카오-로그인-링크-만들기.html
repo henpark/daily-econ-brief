@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>카카오 로그인 링크 만들기</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { max-width: 640px; margin: 0 auto; padding: 40px 20px 80px;
+         font: 16px/1.7 -apple-system, "Apple SD Gothic Neo", sans-serif; }
+  h1 { font-size: 1.4rem; }
+  .step { background: #8881; border-radius: 10px; padding: 16px 18px; margin: 18px 0; }
+  .step b { display: block; margin-bottom: 6px; }
+  input { width: 100%; padding: 12px; font-size: 15px; box-sizing: border-box;
+          border: 1px solid #8886; border-radius: 8px; font-family: ui-monospace, monospace; }
+  #link { display: none; margin-top: 14px; }
+  #link a { display: inline-block; background: #FEE500; color: #191600; font-weight: 700;
+            padding: 13px 22px; border-radius: 8px; text-decoration: none; }
+  #out { word-break: break-all; font-size: 12px; opacity: .6; margin-top: 10px;
+         font-family: ui-monospace, monospace; }
+  .warn { font-size: .9rem; opacity: .75; }
+  code { background: #8882; padding: 2px 6px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<h1>카카오 로그인 링크 만들기</h1>
+<p class="warn">이 페이지는 인터넷으로 아무것도 보내지 않습니다. 브라우저 안에서 주소만 조립합니다.</p>
+
+<div class="step">
+  <b>1. 카카오 REST API 키를 붙여넣으세요</b>
+  <p class="warn">카카오 개발자 사이트 → 내 애플리케이션 → 앱 설정 → 앱 키 → <code>REST API 키</code></p>
+  <input id="key" placeholder="예: 1a2b3c4d5e6f7g8h9i0j..." autocomplete="off" spellcheck="false">
+</div>
+
+<div class="step">
+  <b>2. Redirect URI</b>
+  <p class="warn">카카오에 등록한 값과 <b>글자 하나까지 똑같아야</b> 합니다. 안 건드렸으면 그대로 두세요.</p>
+  <input id="uri" value="https://example.com/oauth" autocomplete="off" spellcheck="false">
+</div>
+
+<div id="link" class="step">
+  <b>3. 아래 버튼을 누르세요</b>
+  <p class="warn">카카오 로그인 · 동의 화면이 뜹니다. 동의하고 나면 <b>빈 화면이나 오류 페이지</b>가 뜨는데 정상입니다.
+     그때 <b>브라우저 주소창</b>을 통째로 복사하세요.</p>
+  <a id="go" href="#" target="_blank" rel="noopener">카카오 로그인하러 가기</a>
+  <div id="out"></div>
+</div>
+
+<script>
+  const key = document.getElementById('key');
+  const uri = document.getElementById('uri');
+  const box = document.getElementById('link');
+  const go  = document.getElementById('go');
+  const out = document.getElementById('out');
+
+  function build() {
+    const k = key.value.trim();
+    if (!k) { box.style.display = 'none'; return; }
+    const url = 'https://kauth.kakao.com/oauth/authorize?'
+      + new URLSearchParams({
+          client_id: k,
+          redirect_uri: uri.value.trim(),
+          response_type: 'code',
+          scope: 'talk_message'
+        }).toString();
+    go.href = url;
+    out.textContent = url;
+    box.style.display = 'block';
+  }
+
+  key.addEventListener('input', build);
+  uri.addEventListener('input', build);
+</script>
+
+</body>
+</html>
