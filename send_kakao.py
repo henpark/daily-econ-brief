@@ -12,8 +12,10 @@
 """
 import json
 import os
+import pathlib
 import subprocess
 import sys
+import time
 import urllib.parse
 import urllib.request
 
@@ -73,35 +75,69 @@ def clip(text: str, limit: int = MAX_TEXT) -> str:
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
 
-def send_memo(access_token: str, text: str, url: str) -> None:
+def send_memo(access_token: str, text: str, url: str, with_button: bool) -> None:
     template = {
         "object_type": "text",
         "text": clip(text),
         "link": {"web_url": url, "mobile_web_url": url},
-        "button_title": "전문 보기",
     }
+    if with_button:
+        template["button_title"] = "전문 보기"
     data = post_form(
         "https://kapi.kakao.com/v2/api/talk/memo/default/send",
         {"template_object": json.dumps(template, ensure_ascii=False)},
         {"Authorization": f"Bearer {access_token}"},
     )
     if data.get("result_code") != 0:
-        sys.exit(f"카카오 전송 실패: {data}")
-    print("카카오톡 전송 완료.")
+        raise RuntimeError(f"카카오 전송 실패: {data}")
+
+
+def collect_messages() -> list[str]:
+    """out/kakao_1.txt, kakao_2.txt ... 순서대로 모은다.
+    인자로 파일 경로를 직접 주면 그 파일만 보낸다."""
+    if len(sys.argv) > 1 and not sys.argv[1].startswith("-"):
+        paths = [pathlib.Path(p) for p in sys.argv[1:]]
+    else:
+        paths = sorted(pathlib.Path("out").glob("kakao_[0-9].txt"))
+        if not paths:  # 예전 구조 대비
+            paths = [pathlib.Path("out/kakao_summary.txt")]
+
+    msgs = []
+    for p in paths:
+        if not p.exists():
+            print(f"::warning::{p} 없음 — 건너뜁니다")
+            continue
+        body = p.read_text(encoding="utf-8").strip()
+        if body:
+            msgs.append(body)
+    return msgs
 
 
 def main() -> None:
-    summary_path = sys.argv[1] if len(sys.argv) > 1 else "out/kakao_summary.txt"
-    with open(summary_path, encoding="utf-8") as f:
-        summary = f.read().strip()
-    if not summary:
-        sys.exit("요약이 비어 있습니다.")
+    msgs = collect_messages()
+    if not msgs:
+        sys.exit("보낼 메시지가 없습니다.")
 
     access_token, new_refresh = refresh_access_token()
     if new_refresh and new_refresh != REFRESH_TOKEN:
         rotate_github_secret(new_refresh)
 
-    send_memo(access_token, summary, DASHBOARD_URL or "https://developers.kakao.com")
+    url = DASHBOARD_URL or "https://developers.kakao.com"
+    sent = 0
+    for i, msg in enumerate(msgs, 1):
+        last = i == len(msgs)
+        try:
+            send_memo(access_token, msg, url, with_button=last)
+            sent += 1
+            print(f"  ✅ {i}/{len(msgs)} 전송 ({len(msg)}자)")
+        except Exception as e:
+            print(f"  ❌ {i}/{len(msgs)} 실패: {str(e)[:200]}")
+        if not last:
+            time.sleep(1.5)  # 카톡에 순서대로 쌓이도록 잠깐 쉰다
+
+    print(f"카카오톡 전송 완료: {sent}/{len(msgs)}통")
+    if sent == 0:
+        sys.exit("전부 실패했습니다.")
 
 
 if __name__ == "__main__":
