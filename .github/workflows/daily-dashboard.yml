@@ -65,7 +65,7 @@ jobs:
           DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
           GH_PAT: ${{ secrets.GH_PAT }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: python send_kakao.py out/kakao_summary.txt
+        run: python send_kakao.py # out/kakao_1.txt ~ kakao_3.txt 를 순서대로 발송
 
       - uses: actions/upload-artifact@v4
         if: always()
